@@ -1,103 +1,268 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import {
+  Users,
+  Target,
+  DollarSign,
+  TrendingUp,
+  Calendar,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+} from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+
+const salesData = [
+  { month: "Jan", sales: 4000 },
+  { month: "Feb", sales: 3000 },
+  { month: "Mar", sales: 2000 },
+  { month: "Apr", sales: 2780 },
+  { month: "May", sales: 1890 },
+  { month: "Jun", sales: 2390 },
+];
+
+const dealStages = [
+  { name: "Prospecting", value: 15, color: "#3B82F6" },
+  { name: "Qualification", value: 25, color: "#10B981" },
+  { name: "Proposal", value: 20, color: "#F59E0B" },
+  { name: "Negotiation", value: 30, color: "#EF4444" },
+  { name: "Closed", value: 10, color: "#8B5CF6" },
+];
+
+const recentActivities = [
+  {
+    id: 1,
+    type: "lead",
+    message: "New lead added: John Smith from TechCorp",
+    time: "2 hours ago",
+  },
+  {
+    id: 2,
+    type: "deal",
+    message: "Deal closed: $50,000 contract with ABC Corp",
+    time: "4 hours ago",
+  },
+  {
+    id: 3,
+    type: "task",
+    message: "Task completed: Follow up with potential client",
+    time: "6 hours ago",
+  },
+  {
+    id: 4,
+    type: "email",
+    message: "Email sent to 15 prospects",
+    time: "1 day ago",
+  },
+];
+
+const stats = [
+  {
+    name: "Total Leads",
+    value: "1,234",
+    change: "+12%",
+    icon: Target,
+    color: "text-blue-600",
+  },
+  {
+    name: "Active Deals",
+    value: "89",
+    change: "+5%",
+    icon: DollarSign,
+    color: "text-green-600",
+  },
+  {
+    name: "Total Revenue",
+    value: "$2.4M",
+    change: "+18%",
+    icon: TrendingUp,
+    color: "text-purple-600",
+  },
+  {
+    name: "Conversion Rate",
+    value: "23%",
+    change: "+2%",
+    icon: Users,
+    color: "text-orange-600",
+  },
+];
+
+export default function Dashboard() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading
+    setTimeout(() => setIsLoading(false), 1000);
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600">
+          Welcome back! Here's what's happening with your business.
+        </p>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat) => (
+          <div key={stat.name} className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className={`p-2 rounded-lg bg-gray-50 ${stat.color}`}>
+                <stat.icon className="h-6 w-6" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">{stat.name}</p>
+                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <span className="text-sm text-green-600">{stat.change}</span>
+              <span className="text-sm text-gray-500 ml-1">
+                from last month
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sales Chart */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Sales Overview
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={salesData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="sales" fill="#3B82F6" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Deal Stages */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Deal Stages
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={dealStages}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, percent }) =>
+                  `${name} ${(percent * 100).toFixed(0)}%`
+                }
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {dealStages.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Recent Activities */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            Recent Activities
+          </h3>
+        </div>
+        <div className="divide-y divide-gray-200">
+          {recentActivities.map((activity) => (
+            <div key={activity.id} className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    {activity.type === "lead" && (
+                      <Target className="h-5 w-5 text-blue-600" />
+                    )}
+                    {activity.type === "deal" && (
+                      <DollarSign className="h-5 w-5 text-green-600" />
+                    )}
+                    {activity.type === "task" && (
+                      <CheckCircle className="h-5 w-5 text-purple-600" />
+                    )}
+                    {activity.type === "email" && (
+                      <Calendar className="h-5 w-5 text-orange-600" />
+                    )}
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-900">
+                      {activity.message}
+                    </p>
+                    <p className="text-sm text-gray-500">{activity.time}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">
+          Quick Actions
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <Target className="h-8 w-8 text-blue-600 mb-2" />
+            <span className="text-sm font-medium text-gray-900">Add Lead</span>
+          </button>
+          <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <Users className="h-8 w-8 text-green-600 mb-2" />
+            <span className="text-sm font-medium text-gray-900">
+              Add Contact
+            </span>
+          </button>
+          <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <DollarSign className="h-8 w-8 text-purple-600 mb-2" />
+            <span className="text-sm font-medium text-gray-900">
+              Create Deal
+            </span>
+          </button>
+          <button className="flex flex-col items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            <CheckCircle className="h-8 w-8 text-orange-600 mb-2" />
+            <span className="text-sm font-medium text-gray-900">Add Task</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
