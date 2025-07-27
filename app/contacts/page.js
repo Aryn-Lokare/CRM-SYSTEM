@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -11,70 +11,15 @@ import {
   Phone,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-
-const mockContacts = [
-  {
-    id: "1",
-    firstName: "John",
-    lastName: "Smith",
-    email: "john.smith@techcorp.com",
-    phone: "+1-555-0123",
-    company: "TechCorp",
-    position: "CTO",
-    address: "123 Main St",
-    city: "San Francisco",
-    state: "CA",
-    zipCode: "94105",
-    country: "USA",
-    notes: "Key decision maker for enterprise deals",
-    assignedTo: "John Doe",
-    createdAt: new Date("2024-01-15"),
-    tags: ["Enterprise", "Decision Maker"],
-  },
-  {
-    id: "2",
-    firstName: "Sarah",
-    lastName: "Johnson",
-    email: "sarah.j@innovate.com",
-    phone: "+1-555-0456",
-    company: "Innovate Inc",
-    position: "VP Sales",
-    address: "456 Business Ave",
-    city: "New York",
-    state: "NY",
-    zipCode: "10001",
-    country: "USA",
-    notes: "Interested in our sales automation tools",
-    assignedTo: "Jane Smith",
-    createdAt: new Date("2024-01-14"),
-    tags: ["Sales", "Automation"],
-  },
-  {
-    id: "3",
-    firstName: "Mike",
-    lastName: "Davis",
-    email: "mike.davis@startup.com",
-    phone: "+1-555-0789",
-    company: "StartupXYZ",
-    position: "Founder",
-    address: "789 Innovation Dr",
-    city: "Austin",
-    state: "TX",
-    zipCode: "73301",
-    country: "USA",
-    notes: "Looking for growth solutions",
-    assignedTo: "John Doe",
-    createdAt: new Date("2024-01-13"),
-    tags: ["Startup", "Growth"],
-  },
-];
+import { contactsApi } from "@/lib/api";
 
 export default function ContactsPage() {
-  const [contacts, setContacts] = useState(mockContacts);
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [companyFilter, setCompanyFilter] = useState("All");
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -92,26 +37,54 @@ export default function ContactsPage() {
     tags: [],
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const newContact = {
-      id: editingContact ? editingContact.id : Date.now().toString(),
-      ...formData,
-      assignedTo: "John Doe",
-      createdAt: editingContact ? editingContact.createdAt : new Date(),
-      updatedAt: new Date(),
-    };
+  useEffect(() => {
+    fetchContacts();
+  }, []);
 
-    if (editingContact) {
-      setContacts(
-        contacts.map((contact) =>
-          contact.id === editingContact.id ? newContact : contact
-        )
-      );
-    } else {
-      setContacts([newContact, ...contacts]);
+  const fetchContacts = async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (searchTerm) params.search = searchTerm;
+      
+      const response = await contactsApi.getAll(params);
+      setContacts(response.contacts);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error fetching contacts:', err);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchContacts();
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      if (editingContact) {
+        await contactsApi.update(editingContact.id, formData);
+      } else {
+        await contactsApi.create(formData);
+      }
+      await fetchContacts();
+      resetForm();
+    } catch (err) {
+      setError(err.message);
+      console.error('Error saving contact:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
     setFormData({
       firstName: "",
       lastName: "",
@@ -151,31 +124,37 @@ export default function ContactsPage() {
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (confirm("Are you sure you want to delete this contact?")) {
-      setContacts(contacts.filter((contact) => contact.id !== id));
+      try {
+        setLoading(true);
+        await contactsApi.delete(id);
+        await fetchContacts();
+      } catch (err) {
+        setError(err.message);
+        console.error('Error deleting contact:', err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const filteredContacts = contacts.filter((contact) => {
-    const matchesSearch =
-      contact.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.company?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesCompany =
-      companyFilter === "All" || contact.company === companyFilter;
-
-    return matchesSearch && matchesCompany;
-  });
-
-  const companies = [
-    ...new Set(contacts.map((contact) => contact.company).filter(Boolean)),
-  ];
+  if (loading && contacts.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading contacts...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          Error: {error}
+        </div>
+      )}
+      
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
@@ -184,266 +163,29 @@ export default function ContactsPage() {
         <button
           onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          disabled={loading}
         >
           <Plus className="h-4 w-4" />
           Add Contact
         </button>
       </div>
 
-      {/* Filters */}
+      {/* Search */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <input
-                type="text"
-                placeholder="Search contacts..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="All">All Companies</option>
-            {companies.map((company) => (
-              <option key={company} value={company}>
-                {company}
-              </option>
-            ))}
-          </select>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <input
+            type="text"
+            placeholder="Search contacts..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
       </div>
 
-      {/* Contact Form */}
-      {showForm && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-medium text-gray-900">
-              {editingContact ? "Edit Contact" : "Add New Contact"}
-            </h2>
-            <button
-              onClick={() => {
-                setShowForm(false);
-                setEditingContact(null);
-                setFormData({
-                  firstName: "",
-                  lastName: "",
-                  email: "",
-                  phone: "",
-                  company: "",
-                  position: "",
-                  address: "",
-                  city: "",
-                  state: "",
-                  zipCode: "",
-                  country: "",
-                  notes: "",
-                  tags: [],
-                });
-              }}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Company
-                </label>
-                <input
-                  type="text"
-                  value={formData.company}
-                  onChange={(e) =>
-                    setFormData({ ...formData, company: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Position
-                </label>
-                <input
-                  type="text"
-                  value={formData.position}
-                  onChange={(e) =>
-                    setFormData({ ...formData, position: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  City
-                </label>
-                <input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) =>
-                    setFormData({ ...formData, city: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  State
-                </label>
-                <input
-                  type="text"
-                  value={formData.state}
-                  onChange={(e) =>
-                    setFormData({ ...formData, state: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  ZIP Code
-                </label>
-                <input
-                  type="text"
-                  value={formData.zipCode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, zipCode: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Country
-                </label>
-                <input
-                  type="text"
-                  value={formData.country}
-                  onChange={(e) =>
-                    setFormData({ ...formData, country: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
-              </label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData({ ...formData, notes: e.target.value })
-                }
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingContact(null);
-                }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                {editingContact ? "Update Contact" : "Add Contact"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Contacts List */}
+      {/* Contacts Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
-            All Contacts ({filteredContacts.length})
-          </h3>
-        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -455,82 +197,54 @@ export default function ContactsPage() {
                   Company
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contact Info
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Location
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Assigned To
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredContacts.map((contact) => (
+              {contacts.map((contact) => (
                 <tr key={contact.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
                         {contact.firstName} {contact.lastName}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {contact.position}
-                      </div>
+                      <div className="text-sm text-gray-500">{contact.email}</div>
+                      <div className="text-sm text-gray-500">{contact.phone}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Building2 className="h-4 w-4 text-gray-400 mr-2" />
-                      <div className="text-sm text-gray-900">
-                        {contact.company}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="space-y-1">
-                      <div className="flex items-center text-sm text-gray-900">
-                        <Mail className="h-3 w-3 text-gray-400 mr-1" />
-                        {contact.email}
-                      </div>
-                      {contact.phone && (
-                        <div className="flex items-center text-sm text-gray-500">
-                          <Phone className="h-3 w-3 text-gray-400 mr-1" />
-                          {contact.phone}
-                        </div>
-                      )}
-                    </div>
+                    <div className="text-sm text-gray-900">{contact.company}</div>
+                    <div className="text-sm text-gray-500">{contact.position}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
                       {contact.city}, {contact.state}
                     </div>
-                    <div className="text-sm text-gray-500">
-                      {contact.country}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {contact.assignedTo}
+                    <div className="text-sm text-gray-500">{contact.country}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(contact.createdAt)}
+                    {formatDate(new Date(contact.createdAt))}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleEdit(contact)}
                         className="text-blue-600 hover:text-blue-900"
+                        disabled={loading}
                       >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(contact.id)}
                         className="text-red-600 hover:text-red-900"
+                        disabled={loading}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -540,8 +254,160 @@ export default function ContactsPage() {
               ))}
             </tbody>
           </table>
+          {contacts.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <div className="text-gray-500">No contacts found</div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-4">
+              {editingContact ? "Edit Contact" : "Add New Contact"}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="First Name"
+                  value={formData.firstName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, firstName: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Last Name"
+                  value={formData.lastName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, lastName: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <input
+                type="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="tel"
+                  placeholder="Phone"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="text"
+                  placeholder="Company"
+                  value={formData.company}
+                  onChange={(e) =>
+                    setFormData({ ...formData, company: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Position"
+                value={formData.position}
+                onChange={(e) =>
+                  setFormData({ ...formData, position: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <input
+                type="text"
+                placeholder="Address"
+                value={formData.address}
+                onChange={(e) =>
+                  setFormData({ ...formData, address: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="grid grid-cols-3 gap-4">
+                <input
+                  type="text"
+                  placeholder="City"
+                  value={formData.city}
+                  onChange={(e) =>
+                    setFormData({ ...formData, city: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="text"
+                  placeholder="State"
+                  value={formData.state}
+                  onChange={(e) =>
+                    setFormData({ ...formData, state: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="text"
+                  placeholder="Zip Code"
+                  value={formData.zipCode}
+                  onChange={(e) =>
+                    setFormData({ ...formData, zipCode: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Country"
+                value={formData.country}
+                onChange={(e) =>
+                  setFormData({ ...formData, country: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <textarea
+                placeholder="Notes"
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+                rows="3"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="flex gap-2 pt-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {loading ? "Saving..." : editingContact ? "Update" : "Create"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={loading}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -13,543 +13,369 @@ import {
   Edit,
   Eye,
 } from "lucide-react";
-import { formatDateTime } from "@/lib/utils";
-
-const mockEmails = [
-  {
-    id: "1",
-    subject: "Follow up on our meeting",
-    body: "Hi John, I wanted to follow up on our meeting last week. I think we have a great opportunity to work together on your enterprise solution needs. Let me know when you're available for a call.",
-    from: "john.doe@company.com",
-    to: ["john.smith@techcorp.com"],
-    cc: [],
-    bcc: [],
-    status: "Sent",
-    sentAt: new Date("2024-01-15T10:30:00"),
-    createdAt: new Date("2024-01-15T10:25:00"),
-    assignedTo: "John Doe",
-    contactId: "1",
-    contact: { firstName: "John", lastName: "Smith", company: "TechCorp" },
-  },
-  {
-    id: "2",
-    subject: "Proposal for Sales Automation Platform",
-    body: "Dear Sarah, Thank you for your interest in our sales automation platform. I've attached our detailed proposal outlining the implementation plan and pricing. Please let me know if you have any questions.",
-    from: "jane.smith@company.com",
-    to: ["sarah.j@innovate.com"],
-    cc: ["manager@innovate.com"],
-    bcc: [],
-    status: "Draft",
-    sentAt: null,
-    createdAt: new Date("2024-01-14T14:20:00"),
-    assignedTo: "Jane Smith",
-    contactId: "2",
-    contact: {
-      firstName: "Sarah",
-      lastName: "Johnson",
-      company: "Innovate Inc",
-    },
-  },
-  {
-    id: "3",
-    subject: "Welcome to our platform",
-    body: "Hi Mike, Welcome to our platform! I'm excited to help you get started with our growth solutions. Here's a quick overview of what we can offer...",
-    from: "john.doe@company.com",
-    to: ["mike.davis@startup.com"],
-    cc: [],
-    bcc: [],
-    status: "Sent",
-    sentAt: new Date("2024-01-13T09:15:00"),
-    createdAt: new Date("2024-01-13T09:10:00"),
-    assignedTo: "John Doe",
-    contactId: "3",
-    contact: { firstName: "Mike", lastName: "Davis", company: "StartupXYZ" },
-  },
-];
-
-const contacts = [
-  {
-    id: "1",
-    name: "John Smith",
-    email: "john.smith@techcorp.com",
-    company: "TechCorp",
-  },
-  {
-    id: "2",
-    name: "Sarah Johnson",
-    email: "sarah.j@innovate.com",
-    company: "Innovate Inc",
-  },
-  {
-    id: "3",
-    name: "Mike Davis",
-    email: "mike.davis@startup.com",
-    company: "StartupXYZ",
-  },
-];
+import { formatDate } from "@/lib/utils";
+import { emailsApi } from "@/lib/api";
 
 export default function EmailsPage() {
-  const [emails, setEmails] = useState(mockEmails);
-  const [showCompose, setShowCompose] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState(null);
+  const [emails, setEmails] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [activeTab, setActiveTab] = useState("inbox");
 
-  const [composeData, setComposeData] = useState({
-    to: "",
-    cc: "",
-    bcc: "",
+  const [formData, setFormData] = useState({
     subject: "",
     body: "",
+    from: "",
+    to: [],
+    cc: [],
+    bcc: [],
+    status: "Draft",
+    contactId: "",
   });
 
-  const handleSendEmail = (e) => {
+  useEffect(() => {
+    fetchEmails();
+  }, []);
+
+  const fetchEmails = async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (searchTerm) params.search = searchTerm;
+      if (statusFilter !== "All") params.status = statusFilter;
+      
+      const response = await emailsApi.getAll(params);
+      setEmails(response.emails);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error fetching emails:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchEmails();
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newEmail = {
-      id: Date.now().toString(),
-      ...composeData,
-      from: "john.doe@company.com",
-      to: composeData.to.split(",").map((email) => email.trim()),
-      cc: composeData.cc
-        ? composeData.cc.split(",").map((email) => email.trim())
-        : [],
-      bcc: composeData.bcc
-        ? composeData.bcc.split(",").map((email) => email.trim())
-        : [],
-      status: "Sent",
-      sentAt: new Date(),
-      createdAt: new Date(),
-      assignedTo: "John Doe",
-      contactId: "1",
-      contact: { firstName: "John", lastName: "Smith", company: "TechCorp" },
-    };
-
-    setEmails([newEmail, ...emails]);
-    setComposeData({
-      to: "",
-      cc: "",
-      bcc: "",
-      subject: "",
-      body: "",
-    });
-    setShowCompose(false);
+    try {
+      setLoading(true);
+      const emailData = {
+        ...formData,
+        to: Array.isArray(formData.to) ? formData.to : formData.to.split(',').map(email => email.trim()),
+        cc: Array.isArray(formData.cc) ? formData.cc : formData.cc.split(',').map(email => email.trim()).filter(Boolean),
+        bcc: Array.isArray(formData.bcc) ? formData.bcc : formData.bcc.split(',').map(email => email.trim()).filter(Boolean),
+      };
+      
+      if (editingEmail) {
+        await emailsApi.update(editingEmail.id, emailData);
+      } else {
+        await emailsApi.create(emailData);
+      }
+      await fetchEmails();
+      resetForm();
+    } catch (err) {
+      setError(err.message);
+      console.error('Error saving email:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSaveDraft = () => {
-    const draftEmail = {
-      id: Date.now().toString(),
-      ...composeData,
-      from: "john.doe@company.com",
-      to: composeData.to
-        ? composeData.to.split(",").map((email) => email.trim())
-        : [],
-      cc: composeData.cc
-        ? composeData.cc.split(",").map((email) => email.trim())
-        : [],
-      bcc: composeData.bcc
-        ? composeData.bcc.split(",").map((email) => email.trim())
-        : [],
+  const resetForm = () => {
+    setFormData({
+      subject: "",
+      body: "",
+      from: "",
+      to: [],
+      cc: [],
+      bcc: [],
       status: "Draft",
-      sentAt: null,
-      createdAt: new Date(),
-      assignedTo: "John Doe",
-      contactId: "1",
-      contact: { firstName: "John", lastName: "Smith", company: "TechCorp" },
-    };
-
-    setEmails([draftEmail, ...emails]);
-    setComposeData({
-      to: "",
-      cc: "",
-      bcc: "",
-      subject: "",
-      body: "",
+      contactId: "",
     });
-    setShowCompose(false);
+    setEditingEmail(null);
+    setShowForm(false);
   };
 
-  const handleDelete = (id) => {
+  const handleEdit = (email) => {
+    setEditingEmail(email);
+    setFormData({
+      subject: email.subject,
+      body: email.body,
+      from: email.from,
+      to: Array.isArray(email.to) ? email.to.join(', ') : email.to,
+      cc: Array.isArray(email.cc) ? email.cc.join(', ') : email.cc,
+      bcc: Array.isArray(email.bcc) ? email.bcc.join(', ') : email.bcc,
+      status: email.status,
+      contactId: email.contactId || "",
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id) => {
     if (confirm("Are you sure you want to delete this email?")) {
-      setEmails(emails.filter((email) => email.id !== id));
+      try {
+        setLoading(true);
+        await emailsApi.delete(id);
+        await fetchEmails();
+      } catch (err) {
+        setError(err.message);
+        console.error('Error deleting email:', err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
-
-  const filteredEmails = emails.filter((email) => {
-    const matchesSearch =
-      email.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      email.body.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      email.to.some((to) =>
-        to.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-
-    const matchesStatus =
-      statusFilter === "All" || email.status === statusFilter;
-
-    let matchesTab = true;
-    if (activeTab === "inbox") {
-      matchesTab = email.status === "Received" || email.status === "Sent";
-    } else if (activeTab === "sent") {
-      matchesTab = email.status === "Sent";
-    } else if (activeTab === "drafts") {
-      matchesTab = email.status === "Draft";
-    }
-
-    return matchesSearch && matchesStatus && matchesTab;
-  });
 
   const getStatusColor = (status) => {
     switch (status) {
+      case "Draft":
+        return "bg-gray-100 text-gray-800";
       case "Sent":
         return "bg-green-100 text-green-800";
-      case "Draft":
-        return "bg-yellow-100 text-yellow-800";
-      case "Received":
-        return "bg-blue-100 text-blue-800";
+      case "Failed":
+        return "bg-red-100 text-red-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
 
+  if (loading && emails.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading emails...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          Error: {error}
+        </div>
+      )}
+      
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Emails</h1>
           <p className="text-gray-600">Manage your email communications</p>
         </div>
         <button
-          onClick={() => setShowCompose(true)}
+          onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          disabled={loading}
         >
           <Plus className="h-4 w-4" />
-          Compose
+          Compose Email
         </button>
       </div>
 
-      {/* Email Tabs */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6">
-            <button
-              onClick={() => setActiveTab("inbox")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "inbox"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              <Inbox className="h-4 w-4 inline mr-2" />
-              Inbox
-            </button>
-            <button
-              onClick={() => setActiveTab("sent")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "sent"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              <Sent className="h-4 w-4 inline mr-2" />
-              Sent
-            </button>
-            <button
-              onClick={() => setActiveTab("drafts")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "drafts"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              <Draft className="h-4 w-4 inline mr-2" />
-              Drafts
-            </button>
-          </nav>
-        </div>
-
-        {/* Filters */}
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input
-                  type="text"
-                  placeholder="Search emails..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <input
+                type="text"
+                placeholder="Search emails..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="All">All Status</option>
-              <option value="Sent">Sent</option>
-              <option value="Draft">Draft</option>
-              <option value="Received">Received</option>
-            </select>
           </div>
-        </div>
-
-        {/* Email List */}
-        <div className="divide-y divide-gray-200">
-          {filteredEmails.map((email) => (
-            <div
-              key={email.id}
-              className="px-6 py-4 hover:bg-gray-50 cursor-pointer"
-              onClick={() => setSelectedEmail(email)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="flex-shrink-0">
-                    <Mail className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {email.subject}
-                      </p>
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                          email.status
-                        )}`}
-                      >
-                        {email.status}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      To: {email.to.join(", ")}
-                    </p>
-                    <p className="text-sm text-gray-400">
-                      {email.status === "Sent"
-                        ? formatDateTime(email.sentAt)
-                        : formatDateTime(email.createdAt)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedEmail(email);
-                    }}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(email.id);
-                    }}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="All">All Status</option>
+            <option value="Draft">Draft</option>
+            <option value="Sent">Sent</option>
+            <option value="Failed">Failed</option>
+          </select>
         </div>
       </div>
 
-      {/* Compose Email Modal */}
-      {showCompose && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Compose Email
-              </h3>
-              <button
-                onClick={() => setShowCompose(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
+      {/* Emails Table */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Subject
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  From/To
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {emails.map((email) => (
+                <tr key={email.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {email.subject}
+                    </div>
+                    <div className="text-sm text-gray-500 truncate max-w-xs">
+                      {email.body}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{email.from}</div>
+                    <div className="text-sm text-gray-500">
+                      To: {Array.isArray(email.to) ? email.to.join(', ') : email.to}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                        email.status
+                      )}`}
+                    >
+                      {email.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatDate(new Date(email.createdAt))}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleEdit(email)}
+                        className="text-blue-600 hover:text-blue-900"
+                        disabled={loading}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(email.id)}
+                        className="text-red-600 hover:text-red-900"
+                        disabled={loading}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {emails.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <div className="text-gray-500">No emails found</div>
             </div>
+          )}
+        </div>
+      </div>
 
-            <form onSubmit={handleSendEmail} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  To *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={composeData.to}
-                  onChange={(e) =>
-                    setComposeData({ ...composeData, to: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="recipient@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  CC
-                </label>
-                <input
-                  type="email"
-                  value={composeData.cc}
-                  onChange={(e) =>
-                    setComposeData({ ...composeData, cc: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="cc@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  BCC
-                </label>
-                <input
-                  type="email"
-                  value={composeData.bcc}
-                  onChange={(e) =>
-                    setComposeData({ ...composeData, bcc: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="bcc@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Subject *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={composeData.subject}
-                  onChange={(e) =>
-                    setComposeData({ ...composeData, subject: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Message *
-                </label>
-                <textarea
-                  required
-                  value={composeData.body}
-                  onChange={(e) =>
-                    setComposeData({ ...composeData, body: e.target.value })
-                  }
-                  rows={8}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                >
-                  Save Draft
-                </button>
+      {/* Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-4">
+              {editingEmail ? "Edit Email" : "Compose Email"}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <input
+                type="text"
+                placeholder="Subject"
+                value={formData.subject}
+                onChange={(e) =>
+                  setFormData({ ...formData, subject: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+              <input
+                type="email"
+                placeholder="From"
+                value={formData.from}
+                onChange={(e) =>
+                  setFormData({ ...formData, from: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+              <input
+                type="text"
+                placeholder="To (comma separated)"
+                value={formData.to}
+                onChange={(e) =>
+                  setFormData({ ...formData, to: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+              <input
+                type="text"
+                placeholder="CC (comma separated)"
+                value={formData.cc}
+                onChange={(e) =>
+                  setFormData({ ...formData, cc: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <select
+                value={formData.status}
+                onChange={(e) =>
+                  setFormData({ ...formData, status: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="Draft">Draft</option>
+                <option value="Sent">Sent</option>
+                <option value="Failed">Failed</option>
+              </select>
+              <textarea
+                placeholder="Email body"
+                value={formData.body}
+                onChange={(e) =>
+                  setFormData({ ...formData, body: e.target.value })
+                }
+                rows="8"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+              <div className="flex gap-2 pt-4">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
-                  <Send className="h-4 w-4" />
-                  Send
+                  {loading ? "Saving..." : editingEmail ? "Update" : "Create"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={loading}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 disabled:opacity-50"
+                >
+                  Cancel
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Email Detail Modal */}
-      {selectedEmail && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Email Details
-              </h3>
-              <button
-                onClick={() => setSelectedEmail(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Subject
-                </label>
-                <p className="text-sm text-gray-900 mt-1">
-                  {selectedEmail.subject}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  From
-                </label>
-                <p className="text-sm text-gray-900 mt-1">
-                  {selectedEmail.from}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  To
-                </label>
-                <p className="text-sm text-gray-900 mt-1">
-                  {selectedEmail.to.join(", ")}
-                </p>
-              </div>
-              {selectedEmail.cc.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    CC
-                  </label>
-                  <p className="text-sm text-gray-900 mt-1">
-                    {selectedEmail.cc.join(", ")}
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Status
-                </label>
-                <span
-                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                    selectedEmail.status
-                  )}`}
-                >
-                  {selectedEmail.status}
-                </span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Date
-                </label>
-                <p className="text-sm text-gray-900 mt-1">
-                  {selectedEmail.status === "Sent"
-                    ? formatDateTime(selectedEmail.sentAt)
-                    : formatDateTime(selectedEmail.createdAt)}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Message
-                </label>
-                <div className="mt-1 p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                    {selectedEmail.body}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}

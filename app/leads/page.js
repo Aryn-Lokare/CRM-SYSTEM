@@ -3,57 +3,12 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Edit, Trash2, Eye } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-
-const mockLeads = [
-  {
-    id: "1",
-    firstName: "John",
-    lastName: "Smith",
-    email: "john.smith@techcorp.com",
-    phone: "+1-555-0123",
-    company: "TechCorp",
-    position: "CTO",
-    source: "Website",
-    status: "New",
-    priority: "High",
-    assignedTo: "John Doe",
-    createdAt: new Date("2024-01-15"),
-    notes: "Interested in our enterprise solution",
-  },
-  {
-    id: "2",
-    firstName: "Sarah",
-    lastName: "Johnson",
-    email: "sarah.j@innovate.com",
-    phone: "+1-555-0456",
-    company: "Innovate Inc",
-    position: "VP Sales",
-    source: "LinkedIn",
-    status: "Contacted",
-    priority: "Medium",
-    assignedTo: "Jane Smith",
-    createdAt: new Date("2024-01-14"),
-    notes: "Follow up scheduled for next week",
-  },
-  {
-    id: "3",
-    firstName: "Mike",
-    lastName: "Davis",
-    email: "mike.davis@startup.com",
-    phone: "+1-555-0789",
-    company: "StartupXYZ",
-    position: "Founder",
-    source: "Referral",
-    status: "Qualified",
-    priority: "High",
-    assignedTo: "John Doe",
-    createdAt: new Date("2024-01-13"),
-    notes: "Looking for growth solutions",
-  },
-];
+import { leadsApi } from "@/lib/api";
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState(mockLeads);
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -72,24 +27,60 @@ export default function LeadsPage() {
     notes: "",
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const newLead = {
-      id: editingLead ? editingLead.id : Date.now().toString(),
-      ...formData,
-      assignedTo: "John Doe",
-      createdAt: editingLead ? editingLead.createdAt : new Date(),
-      updatedAt: new Date(),
-    };
+  // Fetch leads from API
+  useEffect(() => {
+    fetchLeads();
+  }, []);
 
-    if (editingLead) {
-      setLeads(
-        leads.map((lead) => (lead.id === editingLead.id ? newLead : lead))
-      );
-    } else {
-      setLeads([newLead, ...leads]);
+  const fetchLeads = async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (searchTerm) params.search = searchTerm;
+      if (statusFilter !== "All") params.status = statusFilter;
+      
+      const response = await leadsApi.getAll(params);
+      setLeads(response.leads);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error fetching leads:', err);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  // Refetch when search or filter changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchLeads();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      
+      if (editingLead) {
+        await leadsApi.update(editingLead.id, formData);
+      } else {
+        await leadsApi.create(formData);
+      }
+      
+      await fetchLeads();
+      resetForm();
+    } catch (err) {
+      setError(err.message);
+      console.error('Error saving lead:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
     setFormData({
       firstName: "",
       lastName: "",
@@ -123,24 +114,20 @@ export default function LeadsPage() {
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (confirm("Are you sure you want to delete this lead?")) {
-      setLeads(leads.filter((lead) => lead.id !== id));
+      try {
+        setLoading(true);
+        await leadsApi.delete(id);
+        await fetchLeads();
+      } catch (err) {
+        setError(err.message);
+        console.error('Error deleting lead:', err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
-
-  const filteredLeads = leads.filter((lead) => {
-    const matchesSearch =
-      lead.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.company?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === "All" || lead.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -170,8 +157,22 @@ export default function LeadsPage() {
     }
   };
 
+  if (loading && leads.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading leads...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          Error: {error}
+        </div>
+      )}
+      
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Leads</h1>
@@ -180,6 +181,7 @@ export default function LeadsPage() {
         <button
           onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          disabled={loading}
         >
           <Plus className="h-4 w-4" />
           Add Lead
@@ -206,7 +208,7 @@ export default function LeadsPage() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="All">All Status</option>
+            <option value="All">All Statuses</option>
             <option value="New">New</option>
             <option value="Contacted">Contacted</option>
             <option value="Qualified">Qualified</option>
@@ -215,220 +217,14 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Lead Form */}
-      {showForm && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-medium text-gray-900">
-              {editingLead ? "Edit Lead" : "Add New Lead"}
-            </h2>
-            <button
-              onClick={() => {
-                setShowForm(false);
-                setEditingLead(null);
-                setFormData({
-                  firstName: "",
-                  lastName: "",
-                  email: "",
-                  phone: "",
-                  company: "",
-                  position: "",
-                  source: "",
-                  status: "New",
-                  priority: "Medium",
-                  notes: "",
-                });
-              }}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Company
-                </label>
-                <input
-                  type="text"
-                  value={formData.company}
-                  onChange={(e) =>
-                    setFormData({ ...formData, company: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Position
-                </label>
-                <input
-                  type="text"
-                  value={formData.position}
-                  onChange={(e) =>
-                    setFormData({ ...formData, position: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Source
-                </label>
-                <select
-                  value={formData.source}
-                  onChange={(e) =>
-                    setFormData({ ...formData, source: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select Source</option>
-                  <option value="Website">Website</option>
-                  <option value="LinkedIn">LinkedIn</option>
-                  <option value="Referral">Referral</option>
-                  <option value="Cold Call">Cold Call</option>
-                  <option value="Trade Show">Trade Show</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) =>
-                    setFormData({ ...formData, status: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="New">New</option>
-                  <option value="Contacted">Contacted</option>
-                  <option value="Qualified">Qualified</option>
-                  <option value="Lost">Lost</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Priority
-                </label>
-                <select
-                  value={formData.priority}
-                  onChange={(e) =>
-                    setFormData({ ...formData, priority: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
-              </label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData({ ...formData, notes: e.target.value })
-                }
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingLead(null);
-                }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                {editingLead ? "Update Lead" : "Add Lead"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Leads List */}
+      {/* Leads Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
-            All Leads ({filteredLeads.length})
-          </h3>
-        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
+                  Lead
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Company
@@ -440,18 +236,18 @@ export default function LeadsPage() {
                   Priority
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Assigned To
+                  Source
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredLeads.map((lead) => (
+              {leads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
@@ -484,22 +280,24 @@ export default function LeadsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {lead.assignedTo}
+                    {lead.source}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(lead.createdAt)}
+                    {formatDate(new Date(lead.createdAt))}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleEdit(lead)}
                         className="text-blue-600 hover:text-blue-900"
+                        disabled={loading}
                       >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(lead.id)}
                         className="text-red-600 hover:text-red-900"
+                        disabled={loading}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -509,8 +307,147 @@ export default function LeadsPage() {
               ))}
             </tbody>
           </table>
+          {leads.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <div className="text-gray-500">No leads found</div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-lg font-semibold mb-4">
+              {editingLead ? "Edit Lead" : "Add New Lead"}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="First Name"
+                  value={formData.firstName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, firstName: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Last Name"
+                  value={formData.lastName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, lastName: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <input
+                type="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+              <input
+                type="tel"
+                placeholder="Phone"
+                value={formData.phone}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="Company"
+                  value={formData.company}
+                  onChange={(e) =>
+                    setFormData({ ...formData, company: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="text"
+                  placeholder="Position"
+                  value={formData.position}
+                  onChange={(e) =>
+                    setFormData({ ...formData, position: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Source"
+                value={formData.source}
+                onChange={(e) =>
+                  setFormData({ ...formData, source: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <select
+                  value={formData.status}
+                  onChange={(e) =>
+                    setFormData({ ...formData, status: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="New">New</option>
+                  <option value="Contacted">Contacted</option>
+                  <option value="Qualified">Qualified</option>
+                  <option value="Lost">Lost</option>
+                </select>
+                <select
+                  value={formData.priority}
+                  onChange={(e) =>
+                    setFormData({ ...formData, priority: e.target.value })
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </div>
+              <textarea
+                placeholder="Notes"
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+                rows="3"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="flex gap-2 pt-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {loading ? "Saving..." : editingLead ? "Update" : "Create"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={loading}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
