@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+
+enum DealStage {
+  Prospecting
+  Proposal
+  Negotiation
+  Won
+  Lost
+}
+
+enum ProjectStatus {
+  Planned
+  In_Progress
+  Completed
+}
+
+enum TaskStatus {
+  Pending
+  In_Progress
+  Done
+}
+
+model User {
+  id        String   @id
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now())
+
+  leads     Lead[]   @relation("UserLeads")
+  deals     Deal[]   @relation("UserDeals")
+  emails    Email[]  @relation("SentEmails")
+  projects  Project[]
+  tasks     Task[]   @relation("AssignedTasks")
+  dashboardStats DashboardStat[]
+}
+
+model Lead {
+  id          String   @id @default(uuid())
+  name        String
+  email       String?
+  phone       String?
+  source      String?
+  status      String   @default("New")
+  createdAt   DateTime @default(now())
+
+  assignedTo  User?    @relation("UserLeads", fields: [assignedToId], references: [id])
+  assignedToId String?
+}
+
+model Account {
+  id          String   @id @default(uuid())
+  companyName String
+  industry    String?
+  website     String?
+  createdAt   DateTime @default(now())
+
+  contacts    Contact[]
+}
+
+model Contact {
+  id               String   @id @default(uuid())
+  name             String
+  email            String?
+  phone            String?
+  companyName      String?
+  createdAt        DateTime @default(now())
+
+  linkedAccount    Account? @relation(fields: [linkedAccountId], references: [id])
+  linkedAccountId  String?
+
+  deals            Deal[]
+}
+
+model Deal {
+  id         String     @id @default(uuid())
+  title      String?
+  value      Float?
+  stage      DealStage
+  createdAt  DateTime   @default(now())
+
+  contact    Contact?   @relation(fields: [contactId], references: [id])
+  contactId  String?
+
+  owner      User?      @relation("UserDeals", fields: [ownerId], references: [id])
+  ownerId    String?
+}
+
+model Email {
+  id             String   @id @default(uuid())
+  recipientEmail String
+  subject        String
+  body           String
+  status         String   @default("sent")
+  sentAt         DateTime @default(now())
+
+  sender         User     @relation("SentEmails", fields: [senderId], references: [id])
+  senderId       String
+}
+
+model DashboardStat {
+  id           Int      @id @default(autoincrement())
+  date         DateTime
+  leadsCreated Int
+  dealsClosed  Int
+  tasksDone    Int
+
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      ProjectStatus @default(Planned)
+  createdAt   DateTime @default(now())
+
+  owner       User     @relation(fields: [ownerId], references: [id])
+  ownerId     String
+
+  tasks       Task[]
+}
+
+model Task {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      TaskStatus @default(Pending)
+  createdAt   DateTime   @default(now())
+
+  assignedTo  User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  assignedToId String?
+
+  project     Project?   @relation(fields: [projectId], references: [id])
+  projectId   String?
+}
+
