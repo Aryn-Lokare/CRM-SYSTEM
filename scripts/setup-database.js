@@ -13,8 +13,27 @@ const envExamplePath = path.join(process.cwd(), '.env.example');
 if (!fs.existsSync(envPath)) {
   console.log('❌ .env file not found!');
   if (fs.existsSync(envExamplePath)) {
-    console.log('📋 Please copy .env.example to .env and configure your database connection:');
-    console.log('   cp .env.example .env');
+    console.log('📋 Copying .env.example to .env...');
+    try {
+      fs.copyFileSync(envExamplePath, envPath);
+      console.log('✅ Created .env file from .env.example');
+      console.log('\n🔧 IMPORTANT: You need to configure your DATABASE_URL in .env before continuing!');
+      console.log('📝 Example DATABASE_URL formats:');
+      console.log('   PostgreSQL: postgresql://username:password@localhost:5432/crm_database');
+      console.log('   Supabase:   postgresql://postgres:[password]@[host]:5432/postgres');
+      console.log('\n💡 Quick cloud database options:');
+      console.log('   - Supabase: https://supabase.com (free tier)');
+      console.log('   - Neon:     https://neon.tech (free tier)');
+      console.log('   - Railway:  https://railway.app (free tier)');
+      console.log('\n🎯 Next steps:');
+      console.log('   1. Edit .env file with your database URL');
+      console.log('   2. Run this script again: npm run db:setup');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Failed to copy .env.example to .env:', error.message);
+      console.log('📋 Please manually copy .env.example to .env and configure your database connection:');
+      console.log('   cp .env.example .env');
+    }
   }
   console.log('\n📝 Make sure to set your DATABASE_URL in the .env file');
   process.exit(1);
